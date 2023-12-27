@@ -5,8 +5,7 @@ import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import * as SPLToken from "@solana/spl-token";
 import bs58 from 'bs58';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
-import { mplTokenMetadata } from '@metaplex-foundation/mpl-token-metadata';
-import { fetchDigitalAsset } from '@metaplex-foundation/mpl-token-metadata';
+import { mplTokenMetadata, fetchDigitalAsset } from '@metaplex-foundation/mpl-token-metadata';
 import dotenv from "dotenv"
 dotenv.config()
 
@@ -15,8 +14,6 @@ dotenv.config()
 // const secretKey = bs58.decode(secret);
 // const wallet = Keypair.fromSecretKey(secretKey);
 // console.log("PublicKey:", wallet.publicKey.toBase58())
-
-
 
 
 // 👇️ if using ES6 Imports uncomment line below
@@ -43,48 +40,75 @@ dotenv.config()
 await sendNft()
 
 async function sendNft() {
-    // const nft = await metaplex.nfts().findByMint({ mintAddress: new PublicKey('') });
-    // if (!nft) {
-    //     console.log("didn't find the nft")
-    // }
-    // console.log('find nft successful')
-    //filename = './private.txt';
 
-    // try {
-   
-    const contents = await fsPromises.readFile('./private.txt', 'utf-8');
+    const contents = await fsPromises.readFile('./private.txt', 'utf-8'); //privates.txt
     const arr = contents.split(/\r?\n/);
 
-    const contents1 = await fsPromises.readFile('./main.txt', 'utf-8');
+    const contents1 = await fsPromises.readFile('./main.txt', 'utf-8'); //main.txt
     const arr1 = contents1.split(/\r?\n/);
 
-    // console.log(arr); // 👉️ ['One', 'Two', 'Three', 'Four']
-    
-    //     //return arr;
-    //   } catch (err) {
-    //     console.log(err);
-    //   }
+    if (arr1.length == 0){
+        console.log("Please input main wallet into main.txt");
+        return;
+    }
 
+    if (arr.length == 0){
+        console.log("Please input private keys into privates.txt");
+        return;
+    }
+
+    const secretKey = bs58.decode(arr1[0]);
+    const mainwallet = Keypair.fromSecretKey(secretKey);
+    console.log("Main wallets PublicKey:", mainwallet.publicKey.toBase58())
+
+    let solquant = 0;
+
+    if (arr1.length == 2) {
+        solquant = arr1[1];         
+    }
+
+    if (solquant.includes(',')){
+        solquant = e.replace(',', ".");    
+    }
+
+    solquant = Number(solquant);
 
     arr.forEach((privatekey) => 
     {
 
-      sendnfts2(privatekey, arr1[0]);
+      sendnfts2(privatekey, mainwallet, solquant);
 
     });
-    // return;
 }
 
-async function sendnfts2(privatekey, main){
+async function sendnfts2(privatekey, mainwallet, solquant){
 
-    
     const secretKey = bs58.decode(privatekey);   
     const wallet = Keypair.fromSecretKey(secretKey);
-
     const connection = new Connection(clusterApiUrl('mainnet-beta'), "confirmed");
     const metaplex = new Metaplex(connection);
     metaplex.use(keypairIdentity(wallet));
 
+   if (solquant > 0){
+    const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: mainwallet.publicKey,
+          toPubkey: wallet.publicKey,
+          lamports: LAMPORTS_PER_SOL * solquant,
+        }),
+      );
+    
+      // Sign transaction, broadcast, and confirm
+      const signature = await sendAndConfirmTransaction(
+        connection,
+        transaction,
+        [mainwallet],
+      );
+      console.log('SIGNATURE', signature);
+   }
+
+// }
+//////////////////////////////////////////////////////////////////////////////////////////////
     const umi = createUmi('https://api.mainnet-beta.solana.com').use(mplTokenMetadata());
     
 
@@ -105,13 +129,13 @@ async function sendnfts2(privatekey, main){
     
     response.value.forEach((e) => {
         
-        sendnfts3(connection, metaplex, wallet, e, umi, main);
+        sendnfts3(connection, metaplex, wallet, e, umi, mainwallet);
 
     });
 
 }
 
-async function sendnfts3(connection, metaplex, wallet, e, umi, main)
+async function sendnfts3(connection, metaplex, wallet, e, umi, mainwallet)
 {
     const accountInfo = SPLToken.AccountLayout.decode(e.account.data);
     const mint1 = new PublicKey(accountInfo.mint);
@@ -125,7 +149,7 @@ async function sendnfts3(connection, metaplex, wallet, e, umi, main)
     const txBuilder = metaplex.nfts().builders().transfer({
         nftOrSft: {address: new PublicKey(mint1), tokenStandard: asset.metadata.tokenStandard.value}, 
         fromOwner: new PublicKey(wallet.publicKey.toBase58()),
-        toOwner: new PublicKey(main), // wallet receiver from main.txt
+        toOwner: new PublicKey(mainwallet.publicKey.toBase58()), // wallet receiver from main.txt
         amount: token(1),
         authority: wallet 
     });
